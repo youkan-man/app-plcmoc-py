@@ -46,3 +46,12 @@ def test_modbus_broadcast_write_has_no_response() -> None:
     response = run(protocol, adu(0x06, bytes.fromhex("00 02 12 34"), unit=0))
     assert response is None
     assert memory.word("D").read_words(2, 1) == [0x1234]
+
+
+def test_modbus_missing_configured_area_is_server_failure() -> None:
+    memory = build_memory()
+    protocol = ModbusUdpProtocol(
+        memory, {"areas": {"holding_registers": "DOES_NOT_EXIST"}}
+    )
+    response = run(protocol, adu(0x03, struct.pack(">HH", 0, 1)))
+    assert response is not None and response[7:] == bytes.fromhex("83 04")

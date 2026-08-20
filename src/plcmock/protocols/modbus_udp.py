@@ -58,12 +58,15 @@ class ModbusUdpProtocol(ProtocolPlugin):
 
         try:
             response_pdu = self._dispatch(function, payload)
+        except UnknownArea:
+            # UnknownArea inherits ValueError, so it must be handled before the
+            # generic invalid-value branch. A missing configured memory area is
+            # a server configuration/device failure, not bad client data.
+            response_pdu = self._exception(function, self.SERVER_DEVICE_FAILURE)
         except AddressOutOfRange:
             response_pdu = self._exception(function, self.ILLEGAL_DATA_ADDRESS)
         except (InvalidMemoryValue, ValueError, struct.error):
             response_pdu = self._exception(function, self.ILLEGAL_DATA_VALUE)
-        except UnknownArea:
-            response_pdu = self._exception(function, self.SERVER_DEVICE_FAILURE)
 
         if broadcast:
             return None
