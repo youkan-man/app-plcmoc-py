@@ -7,20 +7,21 @@ server:
 plugin_paths:
   - ../examples
 
-# All endpoints below share this memory. For example, SLMP D and FINS DM both
-# map to the canonical D word area, and Modbus holding registers map there too.
+# Every endpoint below shares this canonical memory.
 memory:
   words:
     D:
       size: 65536
-      values:
-        0: 100
-        1: 200
-        100: 4660
+      values: { 0: 100, 1: 200, 100: 4660 }
     W: { size: 65536 }
     R: { size: 65536 }
     ZR: { size: 65536 }
     SD: { size: 4096 }
+    SW: { size: 8192 }
+    Z: { size: 64 }
+    TN: { size: 4096 }
+    CN: { size: 4096 }
+    SN: { size: 4096 }
     CIO: { size: 65536 }
     WR: { size: 65536 }
     HR: { size: 65536 }
@@ -28,30 +29,65 @@ memory:
     EM0: { size: 65536 }
     INPUT:
       size: 65536
-      values:
-        0: 42
+      values: { 0: 42 }
   bits:
     M:
       size: 65536
-      values:
-        0: true
-        1: false
-        2: true
+      values: { 0: true, 1: false, 2: true }
     X: { size: 65536 }
     Y: { size: 65536 }
     L: { size: 65536 }
     F: { size: 65536 }
     V: { size: 65536 }
+    S: { size: 65536 }
     B: { size: 65536 }
     SM: { size: 8192 }
+    SB: { size: 8192 }
+    DX: { size: 8192 }
+    DY: { size: 8192 }
+    TC: { size: 4096 }
+    TS: { size: 4096 }
+    CC: { size: 4096 }
+    CS: { size: 4096 }
+    SC: { size: 4096 }
+    SS: { size: 4096 }
 
 endpoints:
-  - name: mitsubishi-slmp
-    protocol: slmp
+  - name: mitsubishi-mc
+    protocol: mc-protocol
     bind: 0.0.0.0
     port: 5000
     options:
-      max_points: 960
+      # One UDP port accepts every implemented MC frame by default.
+      accepted_frames: ["1E", "3E", "4E"]
+      accepted_encodings: ["binary", "ascii"]
+
+      # Use enabled_commands for an allow-list, or disabled_commands to remove
+      # commands unsupported by the PLC/model being mocked.
+      disabled_commands: []
+      one_e_disabled_commands: []
+
+      max_word_points: 960
+      max_bit_points_binary: 7168
+      max_bit_points_ascii: 3584
+      max_monitor_peers: 1024
+
+      model_name: PLC MOCK
+      model_code: 0
+      initial_state: RUN
+      allow_remote_control: true
+      reset_no_response: true
+
+      one_e_max_points: 256
+      accept_any_1e_pc_number: true
+      one_e_pc_number: 255
+
+      # Existing definitions can be partially overridden. Unspecified fields
+      # inherit the built-in device definition.
+      # device_map:
+      #   "0xA8":
+      #     area: MY_D
+      #     one_e_code: "0x4420"
 
   - name: omron-fins
     protocol: fins-udp
@@ -66,7 +102,6 @@ endpoints:
     bind: 0.0.0.0
     port: 1502
     options:
-      # Omit accepted_unit_ids to accept every unit identifier.
       accepted_unit_ids: [1, 2, 255]
 
   - name: custom-ascii

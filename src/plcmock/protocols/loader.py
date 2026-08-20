@@ -10,14 +10,18 @@ from plcmock.memory import MemorySpace
 
 from .base import ProtocolPlugin
 from .fins_udp import FinsUdpProtocol
+from .mc_1e import Mc1EProtocol
+from .mc_protocol import McProtocol
 from .modbus_udp import ModbusUdpProtocol
 from .slmp import SlmpProtocol
 
 
 BUILTIN_PROTOCOLS: dict[str, type[ProtocolPlugin]] = {
     "slmp": SlmpProtocol,
-    "mc": SlmpProtocol,
-    "mc-protocol": SlmpProtocol,
+    "slmp-3e-4e": SlmpProtocol,
+    "mc": McProtocol,
+    "mc-protocol": McProtocol,
+    "mc-1e": Mc1EProtocol,
     "fins": FinsUdpProtocol,
     "fins-udp": FinsUdpProtocol,
     "modbus-udp": ModbusUdpProtocol,
