@@ -2,7 +2,7 @@ services:
   plc-mock:
     build: .
     restart: unless-stopped
-    command: ["plcmock", "serve", "--config", "/app/config/example.yml"]
+    command: ["python", "/app/main.py"]
     ports:
       - "5000:5000/udp"   # Mitsubishi MC 1E/3E/4E, binary and ASCII
       - "9600:9600/udp"   # OMRON FINS/UDP

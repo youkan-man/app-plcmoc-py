@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from array import array
 from dataclasses import dataclass, field
+import logging
 from threading import RLock
 from typing import Any, Iterable, Mapping
+
+from .logging_config import TRACE, preview_values
+
+
+LOGGER = logging.getLogger("plcmock.memory")
 
 
 class MemoryErrorBase(ValueError):
@@ -33,8 +39,14 @@ def _checked_slice(start: int, count: int, size: int, area: str) -> tuple[int, i
 
 
 def _word(value: Any) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 0xFFFF:
-        raise InvalidMemoryValue(f"word value must be an integer in 0..65535, got {value!r}")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not 0 <= value <= 0xFFFF
+    ):
+        raise InvalidMemoryValue(
+            f"word value must be an integer in 0..65535, got {value!r}"
+        )
     return value
 
 
@@ -64,13 +76,32 @@ class WordArea:
     def read_words(self, start: int, count: int) -> list[int]:
         begin, end = _checked_slice(start, count, self.size, self.name)
         with self._lock:
-            return self._data[begin:end].tolist()
+            values = self._data[begin:end].tolist()
+        _log_memory(
+            TRACE,
+            operation="read",
+            storage="word",
+            area=self.name,
+            address=start,
+            count=count,
+            values=values,
+        )
+        return values
 
     def write_words(self, start: int, values: Iterable[int]) -> None:
         normalized = array("H", (_word(value) for value in values))
         begin, end = _checked_slice(start, len(normalized), self.size, self.name)
         with self._lock:
             self._data[begin:end] = normalized
+        _log_memory(
+            logging.DEBUG,
+            operation="write",
+            storage="word",
+            area=self.name,
+            address=start,
+            count=len(normalized),
+            values=normalized,
+        )
 
     def read_bits(self, word_address: int, bit_address: int, count: int) -> list[bool]:
         if not 0 <= bit_address <= 15:
@@ -79,9 +110,28 @@ class WordArea:
         total_bits = self.size * 16
         begin, end = _checked_slice(start_bit, count, total_bits, self.name)
         with self._lock:
-            return [bool((self._data[index // 16] >> (index % 16)) & 1) for index in range(begin, end)]
+            values = [
+                bool((self._data[index // 16] >> (index % 16)) & 1)
+                for index in range(begin, end)
+            ]
+        _log_memory(
+            TRACE,
+            operation="read",
+            storage="word-bit",
+            area=self.name,
+            address=word_address,
+            bit_address=bit_address,
+            count=count,
+            values=values,
+        )
+        return values
 
-    def write_bits(self, word_address: int, bit_address: int, values: Iterable[bool | int]) -> None:
+    def write_bits(
+        self,
+        word_address: int,
+        bit_address: int,
+        values: Iterable[bool | int],
+    ) -> None:
         normalized = [_bit(value) for value in values]
         if not 0 <= bit_address <= 15:
             raise AddressOutOfRange(f"{self.name}: bit address must be in 0..15")
@@ -93,7 +143,19 @@ class WordArea:
                 word_index, bit_index = divmod(index, 16)
                 mask = 1 << bit_index
                 current = self._data[word_index]
-                self._data[word_index] = (current | mask) if value else (current & ~mask)
+                self._data[word_index] = (
+                    (current | mask) if value else (current & ~mask)
+                )
+        _log_memory(
+            logging.DEBUG,
+            operation="write",
+            storage="word-bit",
+            area=self.name,
+            address=word_address,
+            bit_address=bit_address,
+            count=len(normalized),
+            values=normalized,
+        )
 
 
 @dataclass(slots=True)
@@ -114,13 +176,32 @@ class BitArea:
     def read_bits(self, start: int, count: int) -> list[bool]:
         begin, end = _checked_slice(start, count, self.size, self.name)
         with self._lock:
-            return [bool(value) for value in self._data[begin:end]]
+            values = [bool(value) for value in self._data[begin:end]]
+        _log_memory(
+            TRACE,
+            operation="read",
+            storage="bit",
+            area=self.name,
+            address=start,
+            count=count,
+            values=values,
+        )
+        return values
 
     def write_bits(self, start: int, values: Iterable[bool | int]) -> None:
         normalized = bytearray(_bit(value) for value in values)
         begin, end = _checked_slice(start, len(normalized), self.size, self.name)
         with self._lock:
             self._data[begin:end] = normalized
+        _log_memory(
+            logging.DEBUG,
+            operation="write",
+            storage="bit",
+            area=self.name,
+            address=start,
+            count=len(normalized),
+            values=normalized,
+        )
 
     def read_packed_words(self, start_bit: int, count: int) -> list[int]:
         bits = self.read_bits(start_bit, count * 16)
@@ -198,6 +279,46 @@ class MemorySpace:
             "words": {name: area.size for name, area in self._words.items()},
             "bits": {name: area.size for name, area in self._bits.items()},
         }
+
+
+def _log_memory(
+    level: int,
+    *,
+    operation: str,
+    storage: str,
+    area: str,
+    address: int,
+    count: int,
+    values: Iterable[Any],
+    bit_address: int | None = None,
+) -> None:
+    if not LOGGER.isEnabledFor(level):
+        return
+    preview, truncated = preview_values(values)
+    location = f"{address}.{bit_address}" if bit_address is not None else str(address)
+    suffix = " ..." if truncated else ""
+    LOGGER.log(
+        level,
+        "%s %s area=%s address=%s count=%d values=%s%s",
+        operation,
+        storage,
+        area,
+        location,
+        count,
+        preview,
+        suffix,
+        extra={
+            "event": "memory_access",
+            "memory_operation": operation,
+            "memory_storage": storage,
+            "memory_area": area,
+            "address": address,
+            "bit_address": bit_address,
+            "count": count,
+            "values": preview,
+            "values_truncated": truncated,
+        },
+    )
 
 
 def _area_settings(raw: Any, where: str) -> dict[str, Any]:

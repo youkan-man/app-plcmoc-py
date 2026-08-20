@@ -3,4 +3,4 @@
 from .memory import AddressOutOfRange, MemorySpace, UnknownArea
 
 __all__ = ["AddressOutOfRange", "MemorySpace", "UnknownArea"]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
