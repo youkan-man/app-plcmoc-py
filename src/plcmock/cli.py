@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 import signal
 import sys
+import webbrowser
 
 from .config import (
     AppConfig,
@@ -23,6 +24,7 @@ from .logging_config import configure_logging
 from .memory import MemorySpace
 from .protocols.loader import load_protocol
 from .server import UdpMockServer
+from .web_dashboard import WebDashboardServer
 
 
 LOGGER = logging.getLogger("plcmock.cli")
@@ -37,10 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = subparsers.add_parser(
         "serve",
-        help="start all configured UDP endpoints",
+        help="start all configured UDP endpoints and the web dashboard",
     )
     serve.add_argument("--config", "-c", required=True, type=Path)
     _add_logging_arguments(serve)
+    _add_web_arguments(serve)
 
     check = subparsers.add_parser(
         "check",
@@ -151,6 +154,49 @@ def _add_logging_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_web_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--web",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="host the browser dashboard (enabled by default)",
+    )
+    parser.add_argument(
+        "--web-bind",
+        default="0.0.0.0",
+        help="web dashboard bind address (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=8080,
+        help="web dashboard TCP port (default: 8080; 0 selects a free port)",
+    )
+    parser.add_argument(
+        "--web-write",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="allow PLC memory edits from the dashboard",
+    )
+    parser.add_argument(
+        "--web-max-points",
+        type=int,
+        default=512,
+        help="maximum memory cells returned or edited per web request",
+    )
+    parser.add_argument(
+        "--web-log-buffer",
+        type=int,
+        default=2000,
+        help="number of structured log records retained for the dashboard",
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="open the dashboard URL in the local default browser",
+    )
+
+
 def _check(path: Path, *, as_json: bool) -> int:
     config = load_config(path)
     memory = MemorySpace.from_config(config.memory)
@@ -208,12 +254,13 @@ async def _serve(path: Path, args: argparse.Namespace) -> int:
     config = _apply_logging_overrides(load_config(path), args)
     configure_logging(config.server)
     LOGGER.info(
-        "launching server config=%s log_mode=%s level=%s traffic=%s memory=%s",
+        "launching server config=%s log_mode=%s level=%s traffic=%s memory=%s web=%s",
         config.source,
         config.server.log_mode,
         config.server.log_level,
         config.server.traffic_log,
         config.server.memory_log,
+        args.web,
         extra={
             "event": "launcher_start",
             "config": str(config.source),
@@ -221,10 +268,23 @@ async def _serve(path: Path, args: argparse.Namespace) -> int:
             "log_level": config.server.log_level,
             "traffic_log": config.server.traffic_log,
             "memory_log": config.server.memory_log,
+            "web_enabled": args.web,
         },
     )
+
     server = UdpMockServer(config)
-    await server.start()
+    dashboard: WebDashboardServer | None = None
+    if args.web:
+        dashboard = WebDashboardServer(
+            config,
+            server,
+            bind=args.web_bind,
+            port=args.web_port,
+            allow_write=args.web_write,
+            max_memory_points=args.web_max_points,
+            log_buffer_size=args.web_log_buffer,
+        )
+
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
 
@@ -242,8 +302,18 @@ async def _serve(path: Path, args: argparse.Namespace) -> int:
             pass
 
     try:
+        # Start the dashboard first so it captures endpoint startup logs in its
+        # in-memory ring buffer. Status remains accurate while UDP endpoints are
+        # coming online because it reads bound endpoints dynamically.
+        if dashboard is not None:
+            await dashboard.start()
+        await server.start()
+        if dashboard is not None and args.open_browser and dashboard.url:
+            await asyncio.to_thread(webbrowser.open, dashboard.url)
         await stop.wait()
     finally:
+        if dashboard is not None:
+            await dashboard.close()
         await server.close()
     return 0
 

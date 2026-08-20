@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plcmock-udp"
-version = "0.3.0"
-description = "Extensible UDP PLC protocol mock server for Mitsubishi MC/SLMP, FINS/UDP, and Modbus-style UDP ADUs"
+version = "0.4.0"
+description = "Extensible UDP PLC protocol mock server with a browser dashboard"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "app-plcmoc-py contributors" }]
 dependencies = ["PyYAML>=6.0"]
-keywords = ["plc", "udp", "slmp", "mc-protocol", "fins", "modbus", "mock"]
+keywords = ["plc", "udp", "slmp", "mc-protocol", "fins", "modbus", "mock", "dashboard"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -34,6 +34,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+plcmock = ["web/*.html", "web/*.css", "web/*.js", "web/*.svg"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

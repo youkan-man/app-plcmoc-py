@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#07111d">
+  <title>PLC Mock Control</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <div>
+          <div class="eyebrow">APP-PLCMOC-PY</div>
+          <h1>PLC Mock Control</h1>
+        </div>
+      </div>
+      <div class="topbar-status">
+        <span id="connectionDot" class="status-dot is-connecting" aria-hidden="true"></span>
+        <div>
+          <div id="connectionLabel" class="status-label">CONNECTING</div>
+          <div id="serverAddress" class="status-sub">dashboard discovery</div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="Dashboard sections">
+      <button class="tab-button is-active" type="button" data-tab="overview">Overview</button>
+      <button class="tab-button" type="button" data-tab="memory">Memory</button>
+      <button class="tab-button" type="button" data-tab="traffic">Traffic</button>
+    </nav>
+
+    <main>
+      <section id="tab-overview" class="tab-panel is-active" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">RUNTIME</div>
+            <h2 id="overview-title">Overview</h2>
+          </div>
+          <div class="heading-actions">
+            <label class="compact-field">
+              <span>Log mode</span>
+              <select id="logModeSelect" aria-label="Runtime log mode">
+                <option value="quiet">quiet</option>
+                <option value="normal">normal</option>
+                <option value="debug">debug</option>
+                <option value="trace">trace</option>
+              </select>
+            </label>
+            <button id="refreshStatusButton" class="button secondary" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span class="metric-label">Uptime</span>
+            <strong id="metricUptime" class="metric-value">—</strong>
+            <span id="metricVersion" class="metric-detail">version —</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Requests</span>
+            <strong id="metricReceived" class="metric-value">0</strong>
+            <span id="metricBytesIn" class="metric-detail">0 B received</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Responses</span>
+            <strong id="metricSent" class="metric-value">0</strong>
+            <span id="metricBytesOut" class="metric-detail">0 B sent</span>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">No response / errors</span>
+            <strong id="metricProblems" class="metric-value">0 / 0</strong>
+            <span id="metricFaults" class="metric-detail">faults 0</span>
+          </article>
+        </div>
+
+        <div class="content-grid overview-grid">
+          <article class="panel endpoints-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-kicker">UDP SERVICES</span>
+                <h3>Endpoints</h3>
+              </div>
+              <span id="endpointCount" class="badge">0</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Name</th>
+                    <th>Protocol</th>
+                    <th>Bind</th>
+                    <th class="numeric">RX</th>
+                    <th class="numeric">TX</th>
+                    <th class="numeric">Errors</th>
+                  </tr>
+                </thead>
+                <tbody id="endpointTableBody">
+                  <tr><td colspan="7" class="empty-cell">Waiting for status…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <aside class="panel runtime-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-kicker">INSTANCE</span>
+                <h3>Runtime</h3>
+              </div>
+            </div>
+            <dl class="runtime-list">
+              <div><dt>Config</dt><dd id="runtimeConfig">—</dd></div>
+              <div><dt>Web</dt><dd id="runtimeWeb">—</dd></div>
+              <div><dt>Logging</dt><dd id="runtimeLogging">—</dd></div>
+              <div><dt>Memory</dt><dd id="runtimeMemory">—</dd></div>
+            </dl>
+            <div id="writeNotice" class="notice warning">
+              <strong>Development interface</strong>
+              <span>No authentication is enabled. Do not expose this port to an untrusted network.</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="tab-memory" class="tab-panel" aria-labelledby="memory-title">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">CANONICAL PLC STATE</div>
+            <h2 id="memory-title">Memory inspector</h2>
+          </div>
+          <div id="memoryWriteBadge" class="badge neutral">detecting access</div>
+        </div>
+
+        <article class="panel">
+          <div class="memory-toolbar">
+            <label>
+              <span>Storage</span>
+              <select id="memoryStorage">
+                <option value="word">Word</option>
+                <option value="bit">Bit</option>
+              </select>
+            </label>
+            <label>
+              <span>Area</span>
+              <select id="memoryArea"></select>
+            </label>
+            <label>
+              <span>Start</span>
+              <input id="memoryStart" type="number" min="0" value="0" inputmode="numeric">
+            </label>
+            <label>
+              <span>Count</span>
+              <input id="memoryCount" type="number" min="1" max="512" value="32" inputmode="numeric">
+            </label>
+            <button id="loadMemoryButton" class="button primary" type="button">Read</button>
+            <button id="writeMemoryButton" class="button accent" type="button" disabled>Write changes</button>
+          </div>
+          <div class="memory-summary">
+            <span id="memorySummary">Select an area and read a range.</span>
+            <span id="dirtySummary">No pending changes</span>
+          </div>
+          <div class="table-wrap memory-table-wrap">
+            <table class="memory-table">
+              <thead>
+                <tr>
+                  <th>Address</th>
+                  <th class="numeric">Decimal</th>
+                  <th>Hex / State</th>
+                  <th>Editor</th>
+                </tr>
+              </thead>
+              <tbody id="memoryTableBody">
+                <tr><td colspan="4" class="empty-cell">No memory range loaded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="tab-traffic" class="tab-panel" aria-labelledby="traffic-title">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">LIVE DIAGNOSTICS</div>
+            <h2 id="traffic-title">Traffic console</h2>
+          </div>
+          <div class="heading-actions">
+            <button id="pauseLogsButton" class="button secondary" type="button">Pause</button>
+            <button id="clearLogsButton" class="button danger" type="button">Clear</button>
+          </div>
+        </div>
+
+        <article class="panel traffic-panel">
+          <div class="traffic-toolbar">
+            <label>
+              <span>Endpoint</span>
+              <select id="logEndpointFilter"><option value="">All endpoints</option></select>
+            </label>
+            <label>
+              <span>Minimum level</span>
+              <select id="logLevelFilter">
+                <option value="all">All</option>
+                <option value="TRACE">TRACE</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO">INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+            </label>
+            <label class="search-field">
+              <span>Search</span>
+              <input id="logSearchFilter" type="search" placeholder="device=D, request id, error…">
+            </label>
+            <label class="toggle-field">
+              <input id="autoScrollToggle" type="checkbox" checked>
+              <span>Auto-scroll</span>
+            </label>
+          </div>
+          <div id="logConsole" class="log-console" role="log" aria-live="polite">
+            <div class="log-empty">Waiting for traffic…</div>
+          </div>
+          <div class="console-footer">
+            <span id="logCountLabel">0 records shown</span>
+            <span id="logBufferLabel">buffer —</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app-core.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

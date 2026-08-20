@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Added a dependency-free browser dashboard hosted from the same process as the UDP PLC endpoints.
+- Added Overview, Memory, and Traffic views for endpoint health, counters, live diagnostics, and shared PLC memory editing.
+- Added JSON APIs for health, runtime status, incremental logs, memory reads/writes, and live logging-mode changes.
+- Added a bounded thread-safe dashboard log ring with endpoint traffic and fault-event metrics.
+- Added prevalidated multi-cell word/bit memory edits and a `--no-web-write` read-only mode.
+- Added `--web`, `--web-bind`, `--web-port`, `--web-write`, `--web-max-points`, `--web-log-buffer`, and `--open-browser` launch options.
+- Added packaged static assets with no Node.js build or additional runtime dependency.
+- Exposed the dashboard on `8080/tcp` in Docker and Docker Compose.
+
 ## 0.3.0
 
 - Added switchable `quiet`, `normal`, `debug`, and `trace` logging presets.

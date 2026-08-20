@@ -21,4 +21,5 @@ jobs:
       - run: python -m compileall -q main.py src examples tests
       - run: plcmock check --config config/example.yml --json
       - run: python main.py check --json
+      - run: python -c "from importlib.resources import files; assert files('plcmock').joinpath('web', 'index.html').is_file()"
       - run: python -m pytest -q

@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     command: ["python", "/app/main.py"]
     ports:
+      - "8080:8080/tcp"   # browser dashboard and JSON API
       - "5000:5000/udp"   # Mitsubishi MC 1E/3E/4E, binary and ASCII
       - "9600:9600/udp"   # OMRON FINS/UDP
       - "1502:1502/udp"   # Modbus ADU over UDP (compatibility extension)

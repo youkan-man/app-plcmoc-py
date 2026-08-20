@@ -12,6 +12,6 @@ COPY examples ./examples
 
 RUN pip install --no-cache-dir .
 
-EXPOSE 5000/udp 9600/udp 1502/udp 15000/udp
+EXPOSE 8080/tcp 5000/udp 9600/udp 1502/udp 15000/udp
 
 CMD ["python", "/app/main.py"]
