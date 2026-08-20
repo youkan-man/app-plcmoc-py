@@ -1,0 +1,85 @@
+server:
+  log_level: INFO
+  hex_dump: true
+  max_datagram_size: 65535
+
+# Relative paths are resolved from this configuration file's directory.
+plugin_paths:
+  - ../examples
+
+# All endpoints below share this memory. For example, SLMP D and FINS DM both
+# map to the canonical D word area, and Modbus holding registers map there too.
+memory:
+  words:
+    D:
+      size: 65536
+      values:
+        0: 100
+        1: 200
+        100: 4660
+    W: { size: 65536 }
+    R: { size: 65536 }
+    ZR: { size: 65536 }
+    SD: { size: 4096 }
+    CIO: { size: 65536 }
+    WR: { size: 65536 }
+    HR: { size: 65536 }
+    AR: { size: 65536 }
+    EM0: { size: 65536 }
+    INPUT:
+      size: 65536
+      values:
+        0: 42
+  bits:
+    M:
+      size: 65536
+      values:
+        0: true
+        1: false
+        2: true
+    X: { size: 65536 }
+    Y: { size: 65536 }
+    L: { size: 65536 }
+    F: { size: 65536 }
+    V: { size: 65536 }
+    B: { size: 65536 }
+    SM: { size: 8192 }
+
+endpoints:
+  - name: mitsubishi-slmp
+    protocol: slmp
+    bind: 0.0.0.0
+    port: 5000
+    options:
+      max_points: 960
+
+  - name: omron-fins
+    protocol: fins-udp
+    bind: 0.0.0.0
+    port: 9600
+    options:
+      max_elements: 999
+      accept_any_destination: true
+
+  - name: modbus-udp-extension
+    protocol: modbus-udp
+    bind: 0.0.0.0
+    port: 1502
+    options:
+      # Omit accepted_unit_ids to accept every unit identifier.
+      accepted_unit_ids: [1, 2, 255]
+
+  - name: custom-ascii
+    protocol: custom_ascii_protocol:AsciiDemoProtocol
+    bind: 0.0.0.0
+    port: 15000
+    options: {}
+
+    # Faults are applied after protocol processing. Uncomment to simulate a
+    # noisy device/network while keeping runs reproducible.
+    # faults:
+    #   seed: 1234
+    #   drop_rate: 0.05
+    #   duplicate_rate: 0.01
+    #   corrupt_rate: 0.01
+    #   delay_ms: { min: 5, max: 80 }
