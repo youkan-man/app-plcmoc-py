@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+- Added a full Settings view with runtime endpoint bind, port, protocol, protocol-option, running-state, and fault-injection controls.
+- Added guided option editors for Mitsubishi MC, OMRON FINS/UDP, and Modbus/UDP while retaining advanced JSON for custom plugins.
+- Added per-endpoint start, stop, restart, startup-configuration restore, and metric-reset operations.
+- Added validation-before-stop and automatic rollback when a replacement endpoint fails to bind or initialize.
+- Added direct thread-safe UDP telemetry independent from logging levels, including packet/byte totals, rates, latency, concurrency, faults, errors, recent clients, and 60-second history.
+- Added endpoint detail inspection with protocol-specific runtime state, last request/response, last error, clients, and generation count.
+- Added process status, health warnings, a traffic chart, runtime logging controls, all-counter reset, and normalized YAML export.
+- Extended read-only mode to reject all runtime mutations, not only PLC memory writes.
+
 ## 0.4.0
 
 - Added a dependency-free browser dashboard hosted from the same process as the UDP PLC endpoints.
