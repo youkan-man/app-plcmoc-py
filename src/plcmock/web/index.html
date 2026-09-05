@@ -32,13 +32,14 @@
       <button class="tab-button is-active" type="button" data-tab="overview">Overview</button>
       <button class="tab-button" type="button" data-tab="memory">Memory</button>
       <button class="tab-button" type="button" data-tab="traffic">Traffic</button>
+      <button class="tab-button" type="button" data-tab="settings">Settings</button>
     </nav>
 
     <main>
       <section id="tab-overview" class="tab-panel is-active" aria-labelledby="overview-title">
         <div class="section-heading">
           <div>
-            <div class="eyebrow">RUNTIME</div>
+            <div class="eyebrow">LIVE RUNTIME</div>
             <h2 id="overview-title">Overview</h2>
           </div>
           <div class="heading-actions">
@@ -55,6 +56,14 @@
           </div>
         </div>
 
+        <div id="healthBanner" class="health-banner is-loading">
+          <span class="health-icon" aria-hidden="true"></span>
+          <div>
+            <strong id="healthTitle">Collecting runtime status</strong>
+            <span id="healthDetail">Waiting for endpoint telemetry.</span>
+          </div>
+        </div>
+
         <div class="metric-grid">
           <article class="metric-card">
             <span class="metric-label">Uptime</span>
@@ -64,68 +73,84 @@
           <article class="metric-card">
             <span class="metric-label">Requests</span>
             <strong id="metricReceived" class="metric-value">0</strong>
-            <span id="metricBytesIn" class="metric-detail">0 B received</span>
+            <span id="metricRxRate" class="metric-detail">0 req/s · 0 B received</span>
           </article>
           <article class="metric-card">
             <span class="metric-label">Responses</span>
             <strong id="metricSent" class="metric-value">0</strong>
-            <span id="metricBytesOut" class="metric-detail">0 B sent</span>
+            <span id="metricTxRate" class="metric-detail">0 resp/s · 0 B sent</span>
           </article>
           <article class="metric-card">
             <span class="metric-label">No response / errors</span>
             <strong id="metricProblems" class="metric-value">0 / 0</strong>
-            <span id="metricFaults" class="metric-detail">faults 0</span>
+            <span id="metricFaults" class="metric-detail">fault events 0</span>
           </article>
         </div>
 
-        <div class="content-grid overview-grid">
-          <article class="panel endpoints-panel">
+        <div class="content-grid chart-grid">
+          <article class="panel chart-panel">
             <div class="panel-heading">
               <div>
-                <span class="panel-kicker">UDP SERVICES</span>
-                <h3>Endpoints</h3>
+                <span class="panel-kicker">LAST 60 SECONDS</span>
+                <h3>Traffic rate</h3>
               </div>
-              <span id="endpointCount" class="badge">0</span>
+              <div class="chart-legend"><span class="rx"></span>RX <span class="tx"></span>TX</div>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Protocol</th>
-                    <th>Bind</th>
-                    <th class="numeric">RX</th>
-                    <th class="numeric">TX</th>
-                    <th class="numeric">Errors</th>
-                  </tr>
-                </thead>
-                <tbody id="endpointTableBody">
-                  <tr><td colspan="7" class="empty-cell">Waiting for status…</td></tr>
-                </tbody>
-              </table>
-            </div>
+            <div class="chart-wrap"><canvas id="trafficChart" aria-label="Request and response traffic history"></canvas></div>
           </article>
 
           <aside class="panel runtime-panel">
             <div class="panel-heading">
               <div>
-                <span class="panel-kicker">INSTANCE</span>
+                <span class="panel-kicker">PROCESS</span>
                 <h3>Runtime</h3>
               </div>
+              <span id="runtimeHealthBadge" class="badge neutral">checking</span>
             </div>
             <dl class="runtime-list">
               <div><dt>Config</dt><dd id="runtimeConfig">—</dd></div>
               <div><dt>Web</dt><dd id="runtimeWeb">—</dd></div>
-              <div><dt>Logging</dt><dd id="runtimeLogging">—</dd></div>
-              <div><dt>Memory</dt><dd id="runtimeMemory">—</dd></div>
+              <div><dt>Process</dt><dd id="runtimeProcess">—</dd></div>
+              <div><dt>Resources</dt><dd id="runtimeResources">—</dd></div>
+              <div><dt>Memory map</dt><dd id="runtimeMemory">—</dd></div>
             </dl>
-            <div id="writeNotice" class="notice warning">
-              <strong>Development interface</strong>
-              <span>No authentication is enabled. Do not expose this port to an untrusted network.</span>
-            </div>
           </aside>
         </div>
+
+        <div id="warningList" class="warning-list" aria-live="polite"></div>
+
+        <article class="panel endpoints-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">UDP SERVICES</span>
+              <h3>Endpoints</h3>
+            </div>
+            <span id="endpointCount" class="badge">0</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Name</th>
+                  <th>Protocol</th>
+                  <th>Bind</th>
+                  <th class="numeric">RX/s</th>
+                  <th class="numeric">RX</th>
+                  <th class="numeric">Avg ms</th>
+                  <th class="numeric">Clients</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="endpointTableBody">
+                <tr><td colspan="9" class="empty-cell">Waiting for status…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="endpointDetail" class="endpoint-detail is-empty">
+            Select an endpoint to inspect its protocol state, last request, clients, and fault settings.
+          </div>
+        </article>
       </section>
 
       <section id="tab-memory" class="tab-panel" aria-labelledby="memory-title">
@@ -229,6 +254,55 @@
             <span id="logBufferLabel">buffer —</span>
           </div>
         </article>
+      </section>
+
+      <section id="tab-settings" class="tab-panel" aria-labelledby="settings-title">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">RUNTIME CONFIGURATION</div>
+            <h2 id="settings-title">Settings</h2>
+          </div>
+          <div class="heading-actions">
+            <button id="reloadSettingsButton" class="button secondary" type="button">Reload</button>
+            <a id="exportConfigButton" class="button secondary link-button" href="/api/config/export" download="plcmock-runtime.yml">Export YAML</a>
+            <button id="resetMetricsButton" class="button danger" type="button">Reset counters</button>
+          </div>
+        </div>
+
+        <div id="settingsAccessNotice" class="health-banner is-loading">
+          <span class="health-icon" aria-hidden="true"></span>
+          <div>
+            <strong>Loading configuration</strong>
+            <span>Runtime changes restart only the selected UDP endpoint.</span>
+          </div>
+        </div>
+
+        <article class="panel settings-global-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">GLOBAL</span>
+              <h3>Logging</h3>
+            </div>
+            <span class="badge neutral">live apply</span>
+          </div>
+          <div class="settings-form global-settings-form">
+            <label><span>Preset</span><select id="settingsLogMode"></select></label>
+            <label><span>Level</span><select id="settingsLogLevel"></select></label>
+            <label><span>Traffic</span><select id="settingsTrafficLog"></select></label>
+            <label><span>Memory</span><select id="settingsMemoryLog"></select></label>
+            <label><span>Max HEX bytes</span><input id="settingsMaxHex" type="number" min="0" max="65535"></label>
+            <button id="applyLoggingButton" class="button primary" type="button">Apply logging</button>
+          </div>
+        </article>
+
+        <div class="settings-note">
+          <strong>Runtime settings</strong>
+          <span>Endpoint changes are active immediately but are not written back to the source YAML. Use “Export YAML” to download the current runtime configuration.</span>
+        </div>
+
+        <div id="endpointSettingsList" class="endpoint-settings-list">
+          <article class="panel loading-card">Loading endpoint settings…</article>
+        </div>
       </section>
     </main>
   </div>
