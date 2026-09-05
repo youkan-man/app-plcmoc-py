@@ -27,6 +27,8 @@ class FaultPolicy:
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any] | None) -> "FaultPolicy":
         raw = raw or {}
+        if not isinstance(raw, Mapping):
+            raise ValueError("faults must be a mapping")
         delay = raw.get("delay_ms", 0)
         if isinstance(delay, Mapping):
             minimum = _number(delay.get("min", 0), "faults.delay_ms.min")
@@ -44,6 +46,18 @@ class FaultPolicy:
             delay_max_ms=maximum,
             seed=seed,
         )
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "seed": self.seed,
+            "drop_rate": self.drop_rate,
+            "duplicate_rate": self.duplicate_rate,
+            "corrupt_rate": self.corrupt_rate,
+            "delay_ms": {
+                "min": self.delay_min_ms,
+                "max": self.delay_max_ms,
+            },
+        }
 
     def should_drop(self) -> bool:
         return self._random.random() < self.drop_rate
