@@ -1,162 +1,153 @@
-# Web dashboard
+# Runtime settings and status dashboard
 
-`app-plcmoc-py`は、UDPプロトコルサーバーと同じプロセスでブラウザ管理画面をホストします。Web部分はPython標準ライブラリの`ThreadingHTTPServer`と静的HTML/CSS/JavaScriptで構成され、追加のWebフレームワークやNode.jsビルドを必要としません。
+Version 0.5.0 expands the browser dashboard from a viewer into a runtime control plane for the PLC mock.
 
-## 起動
-
-```bash
-python main.py
-```
-
-既定URL:
-
-```text
-http://localhost:8080
-```
-
-主なオプション:
-
-```text
---web / --no-web
---web-bind <address>
---web-port <port>
---web-write / --no-web-write
---web-max-points <count>
---web-log-buffer <count>
---open-browser
-```
-
-例:
-
-```bash
-python main.py \
-  --web-bind 127.0.0.1 \
-  --web-port 18080 \
-  --no-web-write \
-  --web-log-buffer 5000
-```
-
-`--web-port 0`では空きポートを選択します。選択されたURLは`web_started`ログへ記録されます。
-
-## 画面
+## Views
 
 ### Overview
 
-`/api/status`を定期取得し、次を表示します。
+The Overview page reports telemetry directly from every UDP endpoint. Counters no longer depend on the selected logging mode, so requests and responses continue to be counted in `quiet` mode.
 
-- アプリケーションバージョンと稼働時間
-- 設定ファイル
-- Webバインド先と書込み可否
-- ログモード
-- ワード／ビットメモリエリア数
-- UDPエンドポイントの起動状態と実際のバインド先
-- 受信、送信、無応答、エラー、障害注入の集計
+Displayed information includes:
 
-ログモード選択は`POST /api/logging`を呼び、実行中のロガーレベルと各UDPエンドポイントのHEX出力設定を更新します。プロセス再起動は不要です。
+- process health, uptime, Python version, PID, thread count, maximum RSS and load average;
+- running and desired endpoint counts;
+- cumulative RX/TX packets and bytes;
+- five-second request/response rates;
+- a 60-second traffic graph;
+- active and peak concurrent requests;
+- average and maximum handler latency;
+- no-response, rejected-packet and runtime-error counters;
+- injected drop, corruption and duplicate counters;
+- last request, response, client, request ID and error;
+- recent clients per endpoint;
+- protocol-specific runtime state, including MC CPU state and enabled frame profile.
 
-### Memory
+Selecting an endpoint opens its detail pane. Start, stop and restart actions are available there when web writes are enabled.
 
-`GET /api/memory`で共有`MemorySpace`を読み出します。
+## Settings
+
+The Settings page contains global logging controls and one configuration card per endpoint.
+
+### Global logging
+
+The following values can be changed without restarting the process:
+
+- preset: `quiet`, `normal`, `debug`, `trace`;
+- application log level;
+- traffic log mode;
+- memory log mode;
+- maximum HEX bytes per packet.
+
+Changing the logging preset no longer affects runtime traffic counters. It only changes emitted log records.
+
+### Endpoint configuration
+
+Each endpoint card supports:
+
+- desired running state;
+- bind address and UDP port;
+- protocol/plugin name;
+- guided protocol options;
+- complete advanced `options` JSON;
+- drop, duplicate and corruption rates;
+- minimum/maximum response delay;
+- deterministic fault seed.
+
+Known protocols expose guided controls:
+
+- Mitsubishi MC: accepted frames and encodings, model identity, CPU behavior, command deny lists and point limits;
+- OMRON FINS/UDP: node, destination behavior and element limit;
+- Modbus/UDP: accepted unit IDs and canonical memory-area mappings.
+
+Custom plugins remain configurable through the advanced JSON editor.
+
+Applying an endpoint configuration performs these steps:
+
+1. validate the payload and fault values;
+2. instantiate the requested protocol plugin before stopping the current endpoint;
+3. check obvious active-port conflicts;
+4. stop only the selected endpoint;
+5. bind and start the replacement;
+6. restore the previous configuration and endpoint when replacement startup fails.
+
+The endpoint generation counter increments on every successful start, which makes restarts visible in status output.
+
+### Endpoint actions
+
+- **Start**: start a stopped endpoint with its current runtime configuration.
+- **Stop**: stop the endpoint without stopping the web dashboard or other protocols.
+- **Restart**: recreate the protocol and UDP socket with the current settings.
+- **Restore startup**: restore the endpoint definition loaded from YAML and start it.
+- **Reset metrics**: clear counters, latency data and recent-client history for one endpoint.
+- **Reset counters**: clear telemetry for all endpoints.
+
+## Runtime-only configuration and export
+
+Endpoint edits are intentionally runtime-only. The source YAML is not overwritten, because rewriting YAML would destroy comments and may fail for read-only Docker mounts.
+
+Use **Export YAML** or:
 
 ```text
-GET /api/memory?storage=word&area=D&start=100&count=32
+GET /api/config/export
 ```
 
-応答:
+to download a normalized configuration containing current endpoint options, fault settings, memory configuration and logging settings.
 
-```json
-{
-  "storage": "word",
-  "area": "D",
-  "start": 100,
-  "count": 32,
-  "values": [4660, 0, 0]
-}
-```
+## API
 
-複数の任意アドレスをまとめて変更できます。
-
-```http
-PUT /api/memory
-Content-Type: application/json
-```
-
-```json
-{
-  "storage": "word",
-  "area": "D",
-  "items": [
-    {"address": 100, "value": "0x1234"},
-    {"address": 105, "value": 99}
-  ]
-}
-```
-
-連続範囲形式:
-
-```json
-{
-  "storage": "bit",
-  "area": "M",
-  "start": 20,
-  "values": [1, 0, 1, 1]
-}
-```
-
-書込み時は値、全アドレス、全範囲を先に検証し、検証失敗時に先頭側だけが更新されないようにしています。`--no-web-write`ではすべてのPUTを`403`で拒否します。
-
-### Traffic
-
-既存のPythonログへ専用`DashboardLogHandler`を追加し、構造化されたレコードを固定長のリングバッファへ保持します。UDP通信処理とログ出力処理は分離されており、ブラウザ接続がなくてもPLCモックは動作します。
-
-```text
-GET /api/logs?after=120&limit=200&endpoint=mitsubishi-mc&level=INFO&search=device%3DD
-```
-
-返却レコードには、時刻、レベル、logger、event、request_id、endpoint、protocol、remote、message、および診断フィールドが含まれます。
-
-リングバッファのクリア:
-
-```text
-POST /api/logs/clear
-```
-
-クリアは画面用ログ履歴だけを削除し、PLCメモリやUDPエンドポイントには影響しません。
-
-## JSON API
-
-| Method | Path | 用途 |
+| Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/health` | 軽量ヘルスチェック |
-| GET | `/api/status` | 状態、エンドポイント、メモリ領域、集計 |
-| GET | `/api/logs` | 増分ログ取得とフィルタ |
-| POST | `/api/logs/clear` | 画面用ログバッファをクリア |
-| GET | `/api/memory` | メモリ範囲読出し |
-| PUT | `/api/memory` | メモリ書込み |
-| POST | `/api/logging` | 実行中のログモード切替 |
+| `GET` | `/api/health` | Lightweight runtime health |
+| `GET` | `/api/status` | Process, telemetry, endpoint and protocol state |
+| `GET` | `/api/settings` | Editable runtime configuration and guided option schema |
+| `PUT` | `/api/endpoints/{name}` | Validate, apply and restart one endpoint |
+| `POST` | `/api/endpoints/{name}/action` | Start, stop, restart, restore or reset metrics |
+| `POST` | `/api/metrics/reset` | Reset all endpoint telemetry |
+| `POST` | `/api/logging` | Apply runtime logging settings |
+| `GET` | `/api/config/export` | Download normalized runtime YAML |
+| `GET` | `/api/memory` | Read shared PLC memory |
+| `PUT` | `/api/memory` | Write shared PLC memory |
+| `GET` | `/api/logs` | Read buffered structured logs |
 
-APIは同一オリジン利用を前提としています。レスポンスには`no-store`、`nosniff`、frame拒否、同一オリジン限定のContent Security Policyを付与します。
+Example endpoint update:
 
-## ログとメトリクス
+```json
+{
+  "running": true,
+  "bind": "0.0.0.0",
+  "port": 5000,
+  "protocol": "mc-protocol",
+  "options": {
+    "accepted_frames": ["3E", "4E"],
+    "accepted_encodings": ["binary"],
+    "model_name": "R08CPU",
+    "allow_remote_control": false
+  },
+  "faults": {
+    "seed": 1234,
+    "drop_rate": 0.01,
+    "duplicate_rate": 0,
+    "corrupt_rate": 0,
+    "delay_ms": {"min": 5, "max": 30}
+  }
+}
+```
 
-画面の受信／送信カウンタは、`datagram_received`、`datagram_sent`など既存の構造化ログイベントから集計します。そのため`quiet`または`traffic=off`では新しい通信イベントがログ化されず、画面の通信カウンタも増加しません。パケット集計を継続する場合は`normal`以上を使用してください。
+Endpoint action:
 
-保持件数は`--web-log-buffer`で指定します。最小100件です。ブラウザDOM側も表示行数を制限し、長時間稼働時のメモリ増加を抑制します。
+```json
+{"action": "restart"}
+```
 
-## スレッド境界
+## Read-only mode
 
-- UDPプロトコル処理: asyncioイベントループ
-- Web HTTP処理: `ThreadingHTTPServer`のワーカースレッド
-- PLCメモリ: 各領域の`RLock`で保護
-- 画面ログバッファ: 専用`Lock`で保護
+```bash
+python main.py --no-web-write
+```
 
-Web APIはUDPイベントループをブロックしません。停止時はHTTPサーバーをshutdownし、ログハンドラーをroot loggerから除去してからUDPエンドポイントを閉じます。
+Read-only mode blocks memory writes, logging changes, endpoint changes, endpoint actions and counter resets. Status, logs, memory reads and YAML export remain available.
 
-## セキュリティ上の境界
+## Security boundary
 
-認証、TLS、CSRFトークン、ユーザー別権限は実装していません。PLCメモリを書き換えられる開発用管理面です。
-
-- インターネットへ直接公開しない
-- 必要なら`--web-bind 127.0.0.1`を使う
-- 参照だけなら`--no-web-write`を使う
-- 遠隔利用時はリバースプロキシやVPN側で認証とTLSを追加する
+The dashboard still has no authentication or TLS. Runtime endpoint control is powerful: it can stop protocol ports, load configured plugin modules and alter fault behavior. Bind the dashboard to `127.0.0.1`, use a trusted test network, or place it behind an authenticated reverse proxy/VPN.
